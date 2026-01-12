@@ -96,6 +96,9 @@ export function Timeline() {
   const dragCounterRef = useRef(0);
   const timelineRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
+  const snapshotSelectionRef = useRef<
+    { trackId: string; elementId: string }[]
+  >([]);
   const [isInTimeline, setIsInTimeline] = useState(false);
 
   // Track mouse down/up for distinguishing clicks from drag/resize ends
@@ -179,9 +182,27 @@ export function Timeline() {
   } = useSelectionBox({
     containerRef: tracksContainerRef,
     playheadRef,
-    onSelectionComplete: (elements) => {
-      console.log(JSON.stringify({ onSelectionComplete: elements.length }));
-      setSelectedElements(elements);
+    onSelectionStart: () => {
+      snapshotSelectionRef.current =
+        useTimelineStore.getState().selectedElements;
+    },
+    onSelectionChange: (elements, isAdditive) => {
+      if (isAdditive) {
+        const base = snapshotSelectionRef.current;
+        const merged = [...base];
+        elements.forEach((item) => {
+          if (
+            !merged.some(
+              (m) => m.trackId === item.trackId && m.elementId === item.elementId
+            )
+          ) {
+            merged.push(item);
+          }
+        });
+        setSelectedElements(merged);
+      } else {
+        setSelectedElements(elements);
+      }
     },
   });
 

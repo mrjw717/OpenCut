@@ -74,7 +74,9 @@ interface TimelineStore {
 
   // Multi-selection
   selectedElements: { trackId: string; elementId: string }[];
+  lastInteractedElement: { trackId: string; elementId: string } | null;
   selectElement: (trackId: string, elementId: string, multi?: boolean) => void;
+  selectRange: (trackId: string, elementId: string) => void;
   deselectElement: (trackId: string, elementId: string) => void;
   clearSelectedElements: () => void;
   setSelectedElements: (
@@ -312,6 +314,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
     history: [],
     redoStack: [],
     selectedElements: [],
+    lastInteractedElement: null,
     rippleEditingEnabled: false,
     clipboard: null,
 
@@ -353,21 +356,78 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
         const exists = state.selectedElements.some(
           (c) => c.trackId === trackId && c.elementId === elementId
         );
+        let newSelection = state.selectedElements;
+
         if (multi) {
-          return exists
-            ? {
-                selectedElements: state.selectedElements.filter(
-                  (c) => !(c.trackId === trackId && c.elementId === elementId)
-                ),
-              }
-            : {
-                selectedElements: [
-                  ...state.selectedElements,
-                  { trackId, elementId },
-                ],
-              };
+          newSelection = exists
+            ? state.selectedElements.filter(
+                (c) => !(c.trackId === trackId && c.elementId === elementId)
+              )
+            : [...state.selectedElements, { trackId, elementId }];
+        } else {
+          newSelection = [{ trackId, elementId }];
         }
-        return { selectedElements: [{ trackId, elementId }] };
+
+        return {
+          selectedElements: newSelection,
+          lastInteractedElement: { trackId, elementId },
+        };
+      });
+    },
+
+    selectRange: (trackId, elementId) => {
+      const { lastInteractedElement, _tracks, selectedElements } = get();
+
+      if (!lastInteractedElement || lastInteractedElement.trackId !== trackId) {
+        // Fallback to standard selection logic (Add)
+        get().selectElement(trackId, elementId, true);
+        return;
+      }
+
+      const track = _tracks.find((t) => t.id === trackId);
+      if (!track) return;
+
+      // Find start and end indices
+      const startEl = track.elements.find(
+        (e) => e.id === lastInteractedElement.elementId
+      );
+      const endEl = track.elements.find((e) => e.id === elementId);
+
+      if (!startEl || !endEl) return;
+
+      // Sort elements by startTime
+      const sortedElements = [...track.elements].sort(
+        (a, b) => a.startTime - b.startTime
+      );
+
+      const startIndex = sortedElements.findIndex((e) => e.id === startEl.id);
+      const endIndex = sortedElements.findIndex((e) => e.id === endEl.id);
+
+      if (startIndex === -1 || endIndex === -1) return;
+
+      const low = Math.min(startIndex, endIndex);
+      const high = Math.max(startIndex, endIndex);
+
+      const rangeElements = sortedElements
+        .slice(low, high + 1)
+        .map((e) => ({ trackId, elementId: e.id }));
+
+      // Merge with existing selection
+      const newSelection = [...selectedElements];
+      rangeElements.forEach((item) => {
+        if (
+          !newSelection.some(
+            (sel) =>
+              sel.trackId === item.trackId && sel.elementId === item.elementId
+          )
+        ) {
+          newSelection.push(item);
+        }
+      });
+
+      set({
+        selectedElements: newSelection,
+        lastInteractedElement: { trackId, elementId },
       });
     },
 

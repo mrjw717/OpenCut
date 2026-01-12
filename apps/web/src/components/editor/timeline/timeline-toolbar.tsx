@@ -34,6 +34,7 @@ import {
   SplitSquareHorizontal,
   Scissors,
   LayersIcon,
+  X,
 } from "lucide-react";
 import {
   SplitButton,
@@ -227,6 +228,22 @@ export function TimelineToolbar({
               {formatTimeCode(duration, "HH:MM:SS:FF")}
             </div>
           </div>
+          {selectedElements.length > 0 && (
+            <div className="flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded-sm text-xs font-medium ml-2">
+              <span>
+                {selectedElements.length}{" "}
+                {selectedElements.length === 1 ? "selected" : "selected"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4 ml-1 hover:bg-primary/20"
+                onClick={clearSelectedElements}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
           {tracks.reduce((acc, t) => acc + t.elements.length, 0) === 0 && (
             <>
               <div className="w-px h-6 bg-border mx-1" />

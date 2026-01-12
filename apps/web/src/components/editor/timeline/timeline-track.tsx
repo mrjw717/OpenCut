@@ -50,6 +50,7 @@ export function TimelineTrackContent({
     addElementToTrack,
     selectedElements,
     selectElement,
+    selectRange,
     dragState,
     startDrag: startDragAction,
     updateDragTime,
@@ -431,7 +432,8 @@ export function TimelineTrackContent({
 
     // Detect right-click (button 2) and handle selection without starting drag
     const isRightClick = e.button === 2;
-    const isMultiSelect = e.metaKey || e.ctrlKey || e.shiftKey;
+    const isToggleSelect = e.metaKey || e.ctrlKey;
+    const isRangeSelect = e.shiftKey;
 
     if (isRightClick) {
       // Handle right-click selection
@@ -441,7 +443,7 @@ export function TimelineTrackContent({
 
       // If element is not selected, select it (keep other selections if multi-select)
       if (!isSelected) {
-        selectElement(track.id, element.id, isMultiSelect);
+        selectElement(track.id, element.id, isToggleSelect || isRangeSelect);
       }
       // If element is already selected, keep it selected
 
@@ -449,8 +451,10 @@ export function TimelineTrackContent({
       return;
     }
 
-    // Handle multi-selection for left-click with modifiers
-    if (isMultiSelect) {
+    // Handle range selection
+    if (isRangeSelect) {
+      selectRange(track.id, element.id);
+    } else if (isToggleSelect) {
       selectElement(track.id, element.id, true);
     }
 
