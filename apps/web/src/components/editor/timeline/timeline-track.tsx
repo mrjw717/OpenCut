@@ -56,16 +56,20 @@ export function TimelineTrackContent({
     clearSelectedElements,
     insertTrackAt,
     snappingEnabled,
+    snapConfig,
     rippleEditingEnabled,
   } = useTimelineStore();
 
   const { currentTime, duration } = usePlaybackStore();
+  const { activeProject } = useProjectStore();
 
   // Initialize snapping hook
   const { snapElementPosition, snapElementEdge } = useTimelineSnapping({
     snapThreshold: 10,
-    enableElementSnapping: snappingEnabled,
-    enablePlayheadSnapping: snappingEnabled,
+    snapConfig: snappingEnabled
+      ? snapConfig
+      : { elements: false, playhead: false, markers: false },
+    bookmarks: activeProject?.bookmarks,
   });
 
   // Helper function for drop snapping that tries both edges

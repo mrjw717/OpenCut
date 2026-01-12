@@ -4,7 +4,7 @@ import { TIMELINE_CONSTANTS } from "@/constants/timeline-constants";
 
 export interface SnapPoint {
   time: number;
-  type: "element-start" | "element-end" | "playhead";
+  type: "element-start" | "element-end" | "playhead" | "marker";
   elementId?: string;
   trackId?: string;
 }
@@ -17,14 +17,18 @@ export interface SnapResult {
 
 export interface UseTimelineSnappingOptions {
   snapThreshold?: number; // Distance in pixels to trigger snapping
-  enableElementSnapping?: boolean;
-  enablePlayheadSnapping?: boolean;
+  snapConfig?: {
+    elements: boolean;
+    playhead: boolean;
+    markers: boolean;
+  };
+  bookmarks?: number[];
 }
 
 export function useTimelineSnapping({
   snapThreshold = 10,
-  enableElementSnapping = true,
-  enablePlayheadSnapping = true,
+  snapConfig = { elements: true, playhead: true, markers: true },
+  bookmarks = [],
 }: UseTimelineSnappingOptions = {}) {
   const findSnapPoints = useCallback(
     (
@@ -37,7 +41,7 @@ export function useTimelineSnapping({
       const snapPoints: SnapPoint[] = [];
 
       // Add element snap points
-      if (enableElementSnapping) {
+      if (snapConfig.elements) {
         tracks.forEach((track) => {
           track.elements.forEach((element) => {
             // Skip the element being dragged
@@ -67,16 +71,26 @@ export function useTimelineSnapping({
       }
 
       // Add playhead snap point
-      if (enablePlayheadSnapping) {
+      if (snapConfig.playhead) {
         snapPoints.push({
           time: playheadTime,
           type: "playhead",
         });
       }
 
+      // Add marker snap points
+      if (snapConfig.markers && bookmarks.length > 0) {
+        bookmarks.forEach((time) => {
+          snapPoints.push({
+            time,
+            type: "marker",
+          });
+        });
+      }
+
       return snapPoints;
     },
-    [enableElementSnapping, enablePlayheadSnapping]
+    [snapConfig, bookmarks]
   );
 
   const snapToNearestPoint = useCallback(

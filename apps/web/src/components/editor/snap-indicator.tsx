@@ -61,6 +61,9 @@ export function SnapIndicator({
     snapPoint.time * TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoomLevel;
   const leftPosition = trackLabelsWidth + timelinePosition - scrollLeft;
 
+  const isMarker = snapPoint.type === "marker";
+  const colorClass = isMarker ? "bg-yellow-500/80" : "bg-primary/40";
+
   return (
     <div
       className="absolute pointer-events-none z-90"
@@ -71,7 +74,7 @@ export function SnapIndicator({
         width: "2px",
       }}
     >
-      <div className={"w-0.5 h-full bg-primary/40 opacity-80"} />
+      <div className={`w-0.5 h-full opacity-80 ${colorClass}`} />
     </div>
   );
 }

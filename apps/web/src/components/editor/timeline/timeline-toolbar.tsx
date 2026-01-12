@@ -9,6 +9,13 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   Pause,
@@ -61,6 +68,8 @@ export function TimelineToolbar({
     separateAudio,
     snappingEnabled,
     toggleSnapping,
+    snapConfig,
+    toggleSnapOption,
     rippleEditingEnabled,
     toggleRippleEditing,
   } = useTimelineStore();
@@ -344,18 +353,53 @@ export function TimelineToolbar({
       </div>
       <div className="flex items-center gap-1">
         <TooltipProvider delayDuration={500}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="text" size="icon" onClick={toggleSnapping}>
-                {snappingEnabled ? (
-                  <Magnet className="h-4 w-4 text-primary" />
-                ) : (
-                  <Magnet className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Auto snapping</TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="text" size="icon">
+                    {snappingEnabled ? (
+                      <Magnet className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Magnet className="h-4 w-4" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Snapping options</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuCheckboxItem
+                checked={snappingEnabled}
+                onCheckedChange={toggleSnapping}
+              >
+                Snapping Enabled
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.elements}
+                onCheckedChange={() => toggleSnapOption("elements")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Clips
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.playhead}
+                onCheckedChange={() => toggleSnapOption("playhead")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Playhead
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.markers}
+                onCheckedChange={() => toggleSnapOption("markers")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Markers
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="text" size="icon" onClick={toggleRippleEditing}>

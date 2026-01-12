@@ -57,9 +57,16 @@ interface TimelineStore {
 
   // Snapping settings
   snappingEnabled: boolean;
+  snapConfig: {
+    elements: boolean;
+    playhead: boolean;
+    markers: boolean;
+  };
 
   // Snapping actions
   toggleSnapping: () => void;
+  setSnapConfig: (config: Partial<TimelineStore["snapConfig"]>) => void;
+  toggleSnapOption: (key: keyof TimelineStore["snapConfig"]) => void;
 
   // Ripple editing mode
   rippleEditingEnabled: boolean;
@@ -310,6 +317,11 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
 
     // Snapping settings defaults
     snappingEnabled: true,
+    snapConfig: {
+      elements: true,
+      playhead: true,
+      markers: true,
+    },
 
     getSortedTracks: () => {
       const { _tracks } = get();
@@ -1352,6 +1364,21 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
     // Snapping actions
     toggleSnapping: () => {
       set((state) => ({ snappingEnabled: !state.snappingEnabled }));
+    },
+
+    setSnapConfig: (config) => {
+      set((state) => ({
+        snapConfig: { ...state.snapConfig, ...config },
+      }));
+    },
+
+    toggleSnapOption: (key) => {
+      set((state) => ({
+        snapConfig: {
+          ...state.snapConfig,
+          [key]: !state.snapConfig[key],
+        },
+      }));
     },
 
     // Ripple editing functions
