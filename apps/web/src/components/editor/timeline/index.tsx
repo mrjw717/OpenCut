@@ -71,6 +71,7 @@ import { Slider } from "@/components/ui/slider";
 import { formatTimeCode } from "@/lib/time";
 import { EditableTimecode } from "@/components/ui/editable-timecode";
 import { TimelineToolbar } from "./timeline-toolbar";
+import { useActionHandler } from "@/constants/actions";
 
 export function Timeline() {
   // Timeline shows all tracks (video, audio, effects) and their elements.
@@ -110,6 +111,31 @@ export function Timeline() {
     containerRef: timelineRef,
     isInTimeline,
   });
+
+  // Keybinding handlers for zoom
+  useActionHandler(
+    "zoom-in",
+    () => {
+      setZoomLevel(Math.min(TIMELINE_CONSTANTS.MAX_ZOOM, zoomLevel + 0.25));
+    },
+    true
+  );
+
+  useActionHandler(
+    "zoom-out",
+    () => {
+      setZoomLevel(Math.max(TIMELINE_CONSTANTS.MIN_ZOOM, zoomLevel - 0.25));
+    },
+    true
+  );
+
+  useActionHandler(
+    "reset-zoom",
+    () => {
+      setZoomLevel(1);
+    },
+    true
+  );
 
   // Old marquee selection removed - using new SelectionBox component instead
 
@@ -696,39 +722,96 @@ export function Timeline() {
                 />
                 {/* Time markers */}
                 {(() => {
-                  // Calculate appropriate time interval based on zoom level
-                  const getTimeInterval = (zoom: number) => {
+                  try {
+                    // Safe zoom level usage
+                    const safeZoomLevel =
+                      Number.isFinite(zoomLevel) && zoomLevel > 0
+                        ? zoomLevel
+                        : 1;
+
+                    // Calculate appropriate time interval based on zoom level
+                    const getTimeInterval = (zoom: number) => {
+                      const pixelsPerSecond =
+                        TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoom;
+                      if (pixelsPerSecond >= 300) return 0.1; // Every 0.1s (100ms)
+                      if (pixelsPerSecond >= 100) return 0.5; // Every 0.5s
+                      if (pixelsPerSecond >= 50) return 1; // Every 1s
+                      if (pixelsPerSecond >= 25) return 2; // Every 2s
+                      if (pixelsPerSecond >= 12) return 5; // Every 5s
+                      if (pixelsPerSecond >= 6) return 10; // Every 10s
+                      return 30; // Every 30s
+                    };
+
+                    const interval = getTimeInterval(safeZoomLevel);
+
+                    // For high zoom, we want secondary and tertiary ticks
                     const pixelsPerSecond =
-                      TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoom;
-                    if (pixelsPerSecond >= 200) return 0.1; // Every 0.1s when very zoomed in
-                    if (pixelsPerSecond >= 100) return 0.5; // Every 0.5s when zoomed in
-                    if (pixelsPerSecond >= 50) return 1; // Every 1s at normal zoom
-                    if (pixelsPerSecond >= 25) return 2; // Every 2s when zoomed out
-                    if (pixelsPerSecond >= 12) return 5; // Every 5s when more zoomed out
-                    if (pixelsPerSecond >= 6) return 10; // Every 10s when very zoomed out
-                    return 30; // Every 30s when extremely zoomed out
-                  };
+                      TIMELINE_CONSTANTS.PIXELS_PER_SECOND * safeZoomLevel;
 
-                  const interval = getTimeInterval(zoomLevel);
-                  const markerCount = Math.ceil(duration / interval) + 1;
+                    // Determine how many subdivisions we want
+                    let subdivisions = 1;
+                    if (pixelsPerSecond >= 400 && interval === 0.1) {
+                      subdivisions = 10; // Every 0.01s (ensures 0.05s secondary tick is hit)
+                    } else if (pixelsPerSecond >= 100 && interval === 0.5) {
+                      subdivisions = 5; // Every 0.1s
+                    } else if (pixelsPerSecond >= 50 && interval === 1) {
+                      subdivisions = 4; // Every 0.25s
+                    }
 
-                  return Array.from({ length: markerCount }, (_, i) => {
-                    const time = i * interval;
-                    if (time > duration) return null;
-
-                    const isMainMarker =
-                      time % (interval >= 1 ? Math.max(1, interval) : 1) === 0;
-
-                    return (
-                      <TimelineMarker
-                        key={i}
-                        time={time}
-                        zoomLevel={zoomLevel}
-                        interval={interval}
-                        isMainMarker={isMainMarker}
-                      />
+                    // Only calculate markers up to duration + buffer
+                    const totalTime = duration + 5;
+                    let markerCount = Math.ceil(
+                      totalTime / (interval / subdivisions)
                     );
-                  }).filter(Boolean);
+
+                    // Safety limit to prevent browser freeze
+                    if (markerCount > 10000) {
+                      console.warn(
+                        "Timeline marker count excessive:",
+                        markerCount,
+                        "Reducing granularity"
+                      );
+                      subdivisions = 1; // Fallback to major ticks only
+                      markerCount = Math.ceil(totalTime / interval);
+                    }
+
+                    return Array.from({ length: markerCount }, (_, i) => {
+                      const time = i * (interval / subdivisions);
+                      if (time > totalTime) return null;
+
+                      // Determine level
+                      // Level 1: Major tick (based on original interval)
+                      // Level 2: Secondary tick (halfway or major division)
+                      // Level 3: Tertiary tick (smallest subdivision)
+
+                      const isMajor = Math.abs(time % interval) < 0.001; // epsilon check
+                      const isSecondary =
+                        !isMajor && Math.abs(time % (interval / 2)) < 0.001;
+
+                      let level: 1 | 2 | 3 = 3;
+                      if (isMajor) level = 1;
+                      else if (isSecondary) level = 2;
+                      else level = 3;
+
+                      // Skip minor ticks if not zoomed enough
+                      if (level === 3 && safeZoomLevel < 8) return null;
+                      if (level === 2 && safeZoomLevel < 2) return null;
+
+                      return (
+                        <TimelineMarker
+                          key={i}
+                          time={time}
+                          zoomLevel={safeZoomLevel}
+                          interval={interval}
+                          isMainMarker={level === 1}
+                          level={level}
+                        />
+                      );
+                    }).filter(Boolean);
+                  } catch (e) {
+                    console.error("Error rendering timeline markers:", e);
+                    return null;
+                  }
                 })()}
 
                 {/* Bookmark markers */}

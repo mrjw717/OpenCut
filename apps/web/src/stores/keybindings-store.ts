@@ -30,6 +30,9 @@ export const defaultKeybindings: KeybindingConfig = {
   "ctrl+y": "redo",
   delete: "delete-selected",
   backspace: "delete-selected",
+  "ctrl+=": "zoom-in",
+  "ctrl+-": "zoom-out",
+  "ctrl+0": "reset-zoom",
 };
 
 export interface KeybindingConflict {
@@ -237,7 +240,30 @@ function getPressedKey(ev: KeyboardEvent): string | null {
     }
   }
 
+  // Also check Numpad keys
+  if (code.startsWith("Numpad")) {
+    const num = code.slice(6);
+    // Numpad0..9
+    if (num.length === 1 && num >= "0" && num <= "9") {
+        return num;
+    }
+    if (code === "NumpadAdd") return "="; // Mapping + to = for consistency if needed, or handle + specifically.
+    // Actually, usually Ctrl + + is desired.
+    // But `getPressedKey` returns normalized keys.
+    // Let's rely on standard `key` property fallback below if code doesn't match specific cases.
+  }
+
   // Fallback for other layouts
+  // Ensure we capture symbols like = and -
+  if (key === "=" || key === "+" || key === "-" || key === "_") {
+      // Return the unshifted version for consistent mapping if possible,
+      // but `key` usually carries the shifted value (e.g. + vs =).
+      // However, for Ctrl+=, the key is usually "=".
+      if (key === "+") return "="; // Map + to = to handle Shift+= or Numpad+ as same logical key for zoom
+      if (key === "_") return "-";
+      return key;
+  }
+
   const isDigit = key.length === 1 && key >= "0" && key <= "9";
   if (isDigit) return key;
 
