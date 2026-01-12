@@ -143,6 +143,18 @@ export function TimelineTrackContent({
   useEffect(() => {
     if (!dragState.isDragging) return;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Alt") {
+        useTimelineStore.getState().setDragState({ isCopying: true });
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Alt") {
+        useTimelineStore.getState().setDragState({ isCopying: false });
+      }
+    };
+
     const handleMouseMove = (e: MouseEvent) => {
       if (!timelineRef.current) return;
       lastMouseXRef.current = e.clientX;
@@ -430,10 +442,14 @@ export function TimelineTrackContent({
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
     };
   }, [
     dragState.isDragging,
