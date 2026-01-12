@@ -25,6 +25,7 @@ import {
 import { DEFAULT_FPS, useProjectStore } from "@/stores/project-store";
 import { useTimelineSnapping, SnapPoint } from "@/hooks/use-timeline-snapping";
 import { useEdgeAutoScroll } from "@/hooks/use-edge-auto-scroll";
+import { GhostTrack } from "./ghost-track";
 
 export function TimelineTrackContent({
   track,
@@ -1126,6 +1127,7 @@ export function TimelineTrackContent({
         ref={timelineRef}
         className="h-full relative track-elements-container min-w-full"
       >
+        <GhostTrack track={track} zoomLevel={zoomLevel} isTarget={isDropping} />
         {track.elements.length === 0 ? (
           <div
             className={`h-full w-full rounded-sm border-2 border-dashed flex items-center justify-center text-xs text-muted-foreground transition-colors ${

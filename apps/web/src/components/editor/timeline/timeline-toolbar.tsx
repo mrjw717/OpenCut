@@ -227,7 +227,7 @@ export function TimelineToolbar({
               {formatTimeCode(duration, "HH:MM:SS:FF")}
             </div>
           </div>
-          {tracks.length === 0 && (
+          {tracks.reduce((acc, t) => acc + t.elements.length, 0) === 0 && (
             <>
               <div className="w-px h-6 bg-border mx-1" />
               <Tooltip>

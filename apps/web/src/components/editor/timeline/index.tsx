@@ -470,10 +470,10 @@ export function Timeline() {
     setIsDragOver(false);
     dragCounterRef.current = 0;
 
-    // Ignore timeline element drags - they're handled by track-specific handlers
     const hasTimelineElement = e.dataTransfer.types.includes(
       "application/x-timeline-element"
     );
+
     if (hasTimelineElement) {
       return;
     }
@@ -924,7 +924,7 @@ export function Timeline() {
                 style={{
                   height: `${Math.max(
                     200,
-                    Math.min(800, getTotalTracksHeight(tracks))
+                    Math.min(800, getTotalTracksHeight(tracks) + 100)
                   )}px`,
                   width: `${dynamicTimelineWidth}px`,
                 }}
@@ -980,6 +980,86 @@ export function Timeline() {
                         </ContextMenuContent>
                       </ContextMenu>
                     ))}
+                    {/* Empty space for creating new tracks via drag */}
+                    <div
+                      className="absolute left-0 right-0 bottom-0"
+                      style={{
+                        top: `${getTotalTracksHeight(tracks)}px`,
+                        height: "100px",
+                      }}
+                      onMouseUp={(e) => {
+                        const {
+                          dragState,
+                          addTrack,
+                          moveElementToTrack,
+                          updateElementStartTime,
+                          updateElementStartTimeWithRipple,
+                          rippleEditingEnabled,
+                          tracks,
+                          endDrag,
+                        } = useTimelineStore.getState();
+
+                        if (
+                          !dragState.isDragging ||
+                          !dragState.elementId ||
+                          !dragState.trackId
+                        )
+                          return;
+
+                        const sourceTrack = tracks.find(
+                          (t) => t.id === dragState.trackId
+                        );
+                        if (!sourceTrack) return;
+
+                        // Calculate drop time
+                        const timelineRect =
+                          timelineRef.current?.getBoundingClientRect();
+                        if (!timelineRect) return;
+
+                        const tracksViewport = tracksScrollRef.current;
+                        const scrollLeft = tracksViewport?.scrollLeft || 0;
+                        const mouseX = Math.max(
+                          0,
+                          e.clientX - timelineRect.left
+                        );
+                        const clickX = mouseX + scrollLeft;
+
+                        const rawTime =
+                          clickX /
+                          (TIMELINE_CONSTANTS.PIXELS_PER_SECOND * zoomLevel);
+                        const dropTime = Math.max(
+                          0,
+                          rawTime - dragState.clickOffsetTime
+                        );
+
+                        // Create new track
+                        const newTrackId = addTrack(sourceTrack.type);
+
+                        // Move element
+                        moveElementToTrack(
+                          dragState.trackId,
+                          newTrackId,
+                          dragState.elementId
+                        );
+
+                        // Update position
+                        if (rippleEditingEnabled) {
+                          updateElementStartTimeWithRipple(
+                            newTrackId,
+                            dragState.elementId,
+                            dropTime
+                          );
+                        } else {
+                          updateElementStartTime(
+                            newTrackId,
+                            dragState.elementId,
+                            dropTime
+                          );
+                        }
+
+                        endDrag();
+                      }}
+                    />
                   </>
                 )}
               </div>

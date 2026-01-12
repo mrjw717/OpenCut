@@ -687,6 +687,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
     },
 
     moveElementToTrack: (fromTrackId, toTrackId, elementId) => {
+      const { rippleEditingEnabled } = get();
       get().pushHistory();
 
       const fromTrack = get()._tracks.find((track) => track.id === fromTrackId);
@@ -706,14 +707,40 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
         return;
       }
 
+      // Calculate gap to close on source track if ripple is enabled
+      const elementDuration =
+        elementToMove.duration -
+        elementToMove.trimStart -
+        elementToMove.trimEnd;
+      const elementEndTime = elementToMove.startTime + elementDuration;
+
       const newTracks = get()
         ._tracks.map((track) => {
           if (track.id === fromTrackId) {
+            // Remove element
+            let updatedElements = track.elements.filter(
+              (element) => element.id !== elementId
+            );
+
+            // Close gap if ripple enabled
+            if (rippleEditingEnabled) {
+              updatedElements = updatedElements.map((element) => {
+                if (element.startTime >= elementEndTime) {
+                  return {
+                    ...element,
+                    startTime: Math.max(
+                      0,
+                      element.startTime - elementDuration
+                    ),
+                  };
+                }
+                return element;
+              });
+            }
+
             return {
               ...track,
-              elements: track.elements.filter(
-                (element) => element.id !== elementId
-              ),
+              elements: updatedElements,
             };
           }
           if (track.id === toTrackId) {
