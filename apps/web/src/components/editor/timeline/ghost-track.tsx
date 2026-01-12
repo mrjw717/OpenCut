@@ -45,20 +45,22 @@ export function GhostTrack({ track, zoomLevel, isTarget }: GhostTrackProps) {
   let simulatedElements: TimelineElementType[] = [...track.elements];
 
   // 1. Simulate Source Removal & Ripple
-  if (isSource) {
+  if (isSource && !dragState.isCopying) {
      // Remove dragged element
      simulatedElements = simulatedElements.filter(e => e.id !== draggedElementId);
 
-     // Ripple Close
-     simulatedElements = simulatedElements.map(e => {
-        if (e.startTime >= elementEndTime) {
-             return {
-                 ...e,
-                 startTime: Math.max(0, e.startTime - elementDuration)
-             };
-        }
-        return e;
-     });
+     // Ripple Close (only if ripple enabled)
+     if (rippleEditingEnabled) {
+         simulatedElements = simulatedElements.map(e => {
+            if (e.startTime >= elementEndTime) {
+                 return {
+                     ...e,
+                     startTime: Math.max(0, e.startTime - elementDuration)
+                 };
+            }
+            return e;
+         });
+     }
   }
 
   // 2. Simulate Target Insertion & Ripple

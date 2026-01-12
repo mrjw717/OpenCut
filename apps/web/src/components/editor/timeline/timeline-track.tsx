@@ -238,7 +238,11 @@ export function TimelineTrackContent({
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      if (!dragState.elementId || !dragState.trackId) return;
+      const { dragState: freshDragState } = useTimelineStore.getState();
+
+      if (!freshDragState.elementId || !freshDragState.trackId) return;
+
+      const dragState = freshDragState;
 
       // If this track initiated the drag, we should handle the mouse up regardless of where it occurs
       const isTrackThatStartedDrag = dragState.trackId === track.id;
@@ -304,41 +308,57 @@ export function TimelineTrackContent({
           });
 
           if (!hasOverlap) {
-            if (dragState.trackId === track.id) {
-              if (rippleEditingEnabled) {
-                updateElementStartTimeWithRipple(
-                  track.id,
-                  dragState.elementId,
-                  finalTime
-                );
-              } else {
-                updateElementStartTime(
-                  track.id,
-                  dragState.elementId,
-                  finalTime
-                );
+            if (dragState.isCopying) {
+              const sourceTrack = tracks.find(
+                (t) => t.id === dragState.trackId
+              );
+              const sourceElement = sourceTrack?.elements.find(
+                (e) => e.id === dragState.elementId
+              );
+              if (sourceElement) {
+                const { id, ...elementData } = sourceElement;
+                addElementToTrack(track.id, {
+                  ...elementData,
+                  startTime: finalTime,
+                });
               }
             } else {
-              moveElementToTrack(
-                dragState.trackId,
-                track.id,
-                dragState.elementId
-              );
-              requestAnimationFrame(() => {
+              if (dragState.trackId === track.id) {
                 if (rippleEditingEnabled) {
                   updateElementStartTimeWithRipple(
                     track.id,
-                    dragState.elementId!,
+                    dragState.elementId,
                     finalTime
                   );
                 } else {
                   updateElementStartTime(
                     track.id,
-                    dragState.elementId!,
+                    dragState.elementId,
                     finalTime
                   );
                 }
-              });
+              } else {
+                moveElementToTrack(
+                  dragState.trackId,
+                  track.id,
+                  dragState.elementId
+                );
+                requestAnimationFrame(() => {
+                  if (rippleEditingEnabled) {
+                    updateElementStartTimeWithRipple(
+                      track.id,
+                      dragState.elementId!,
+                      finalTime
+                    );
+                  } else {
+                    updateElementStartTime(
+                      track.id,
+                      dragState.elementId!,
+                      finalTime
+                    );
+                  }
+                });
+              }
             }
           }
         }
@@ -371,14 +391,31 @@ export function TimelineTrackContent({
           });
 
           if (!hasOverlap) {
-            if (rippleEditingEnabled) {
-              updateElementStartTimeWithRipple(
-                track.id,
-                dragState.elementId,
-                finalTime
+            if (dragState.isCopying) {
+              const sourceElement = track.elements.find(
+                (e) => e.id === dragState.elementId
               );
+              if (sourceElement) {
+                const { id, ...elementData } = sourceElement;
+                addElementToTrack(track.id, {
+                  ...elementData,
+                  startTime: finalTime,
+                });
+              }
             } else {
-              updateElementStartTime(track.id, dragState.elementId, finalTime);
+              if (rippleEditingEnabled) {
+                updateElementStartTimeWithRipple(
+                  track.id,
+                  dragState.elementId,
+                  finalTime
+                );
+              } else {
+                updateElementStartTime(
+                  track.id,
+                  dragState.elementId,
+                  finalTime
+                );
+              }
             }
           }
         }
@@ -404,6 +441,7 @@ export function TimelineTrackContent({
     dragState.elementId,
     dragState.trackId,
     dragState.currentTime,
+    dragState.isCopying,
     zoomLevel,
     tracks,
     track.id,

@@ -44,11 +44,6 @@ interface TimelineStore {
   history: TimelineTrack[][];
   redoStack: TimelineTrack[][];
 
-  // Clipboard buffer
-  clipboard: {
-    items: Array<{ trackType: TrackType; element: CreateTimelineElement }>;
-  } | null;
-
   // Always returns properly ordered tracks with main track ensured
   tracks: TimelineTrack[];
 
@@ -86,6 +81,7 @@ interface TimelineStore {
   // Drag state
   dragState: {
     isDragging: boolean;
+    isCopying: boolean;
     elementId: string | null;
     trackId: string | null;
     startMouseX: number;
@@ -194,8 +190,8 @@ interface TimelineStore {
   clearTimeline: () => void;
 
   // Clipboard actions
-  copySelected: () => void;
-  pasteAtTime: (time: number) => void;
+  copySelected: () => Promise<void>;
+  pasteFromClipboard: (time: number) => Promise<void>;
 
   // Unified selection-aware actions
   deleteSelected: (trackId?: string, elementId?: string) => void;
@@ -316,7 +312,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
     selectedElements: [],
     lastInteractedElement: null,
     rippleEditingEnabled: false,
-    clipboard: null,
 
     // Snapping settings defaults
     snappingEnabled: true,
@@ -1334,6 +1329,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
 
     dragState: {
       isDragging: false,
+      isCopying: false,
       elementId: null,
       trackId: null,
       startMouseX: 0,
@@ -1357,6 +1353,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
       set({
         dragState: {
           isDragging: true,
+          isCopying: false,
           elementId,
           trackId,
           startMouseX,
@@ -1380,6 +1377,7 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
       set({
         dragState: {
           isDragging: false,
+          isCopying: false,
           elementId: null,
           trackId: null,
           startMouseX: 0,
@@ -1565,13 +1563,16 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
       return true;
     },
 
-    copySelected: () => {
+    copySelected: async () => {
       const { selectedElements, _tracks } = get();
       if (selectedElements.length === 0) return;
 
+      const sortedTracks = get().getSortedTracks();
       const items: Array<{
         trackType: TrackType;
         element: CreateTimelineElement;
+        originalTrackId: string;
+        trackIndex: number;
       }> = [];
 
       for (const { trackId, elementId } of selectedElements) {
@@ -1579,62 +1580,161 @@ export const useTimelineStore = create<TimelineStore>((set, get) => {
         const element = track?.elements.find((e) => e.id === elementId);
         if (!track || !element) continue;
 
-        // Prepare a creation-friendly copy without id
         const { id: _id, ...rest } = element as TimelineElement;
+        const trackIndex = sortedTracks.findIndex((t) => t.id === trackId);
+
         items.push({
           trackType: track.type,
           element: rest as CreateTimelineElement,
+          originalTrackId: track.id,
+          trackIndex: trackIndex >= 0 ? trackIndex : 0,
         });
       }
 
-      set({ clipboard: { items } });
+      const clipboardData = {
+        type: "opencut-clipboard",
+        version: 1,
+        items,
+      };
+
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(clipboardData));
+        const { toast } = await import("sonner");
+        toast.success("Copied to clipboard");
+      } catch (err) {
+        console.error("Failed to copy", err);
+        const { toast } = await import("sonner");
+        toast.error("Failed to copy to clipboard");
+      }
     },
 
-    pasteAtTime: (time) => {
-      const { clipboard } = get();
-      if (!clipboard || clipboard.items.length === 0) return;
-
-      // Determine reference start time offset based on earliest element in clipboard
-      const minStart = Math.min(
-        ...clipboard.items.map((x) => x.element.startTime)
-      );
-
-      get().pushHistory();
-
-      for (const item of clipboard.items) {
-        const targetTrackId = get().findOrCreateTrack(item.trackType);
-        const relativeOffset = item.element.startTime - minStart;
-        const startTime = Math.max(0, time + relativeOffset);
-
-        // Ensure no overlap on target track
-        const duration =
-          item.element.duration - item.element.trimStart - item.element.trimEnd;
-        const hasOverlap = get().checkElementOverlap(
-          targetTrackId,
-          startTime,
-          duration
-        );
-        if (hasOverlap) {
-          // If overlap, nudge forward slightly until free (simple resolve)
-          let candidate = startTime;
-          let safety = 0;
-          while (
-            get().checkElementOverlap(targetTrackId, candidate, duration) &&
-            safety < 1000
-          ) {
-            candidate += 0.01;
-            safety += 1;
-          }
-          get().addElementToTrack(targetTrackId, {
-            ...item.element,
-            startTime: candidate,
-          });
-        } else {
-          get().addElementToTrack(targetTrackId, {
-            ...item.element,
-            startTime,
-          });
+    pasteFromClipboard: async (time: number) => {
+      try {
+        const text = await navigator.clipboard.readText();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          return;
         }
+
+        if (data?.type !== "opencut-clipboard" || !Array.isArray(data.items)) {
+          return;
+        }
+
+        const items = data.items as Array<{
+          trackType: TrackType;
+          element: CreateTimelineElement;
+          originalTrackId: string;
+          trackIndex: number;
+        }>;
+
+        if (items.length === 0) return;
+
+        get().pushHistory();
+
+        // Sort items by track visual order, then by time
+        items.sort((a, b) => {
+          if (a.trackIndex !== b.trackIndex)
+            return a.trackIndex - b.trackIndex;
+          return a.element.startTime - b.element.startTime;
+        });
+
+        // Group by original track ID
+        const tracksMap = new Map<string, typeof items>();
+        items.forEach((item) => {
+          if (!tracksMap.has(item.originalTrackId))
+            tracksMap.set(item.originalTrackId, []);
+          tracksMap.get(item.originalTrackId)!.push(item);
+        });
+
+        const minStart = Math.min(...items.map((x) => x.element.startTime));
+        const sortedTracks = get().getSortedTracks();
+        const usedTargetTracks = new Set<string>();
+
+        // Iterate through source tracks
+        for (const [_, sourceItems] of tracksMap) {
+          const trackType = sourceItems[0].trackType;
+
+          // Find a target track: First available compatible track that hasn't been used yet?
+          // Or strictly sequential?
+          // Let's try to find the first compatible track that hasn't been used in this paste op.
+          let targetTrackId: string | null = null;
+
+          const compatibleTracks = sortedTracks.filter(
+            (t) =>
+              (t.type === trackType ||
+                (t.type === "media" && trackType === "audio") ||
+                (t.type === "audio" && trackType === "media")) &&
+              validateElementTrackCompatibility(
+                { type: trackType === "audio" ? "media" : "text" }, // rough check type mapping
+                t
+              ).isValid // This validation check is a bit weak here, let's rely on type match
+          );
+
+          // Simplified track matching:
+          // Find first track of correct type that is not in usedTargetTracks
+          const candidate = sortedTracks.find(
+            (t) => t.type === trackType && !usedTargetTracks.has(t.id)
+          );
+
+          if (candidate) {
+            targetTrackId = candidate.id;
+          } else {
+            // Create new track
+            targetTrackId = get().addTrack(trackType);
+          }
+
+          if (targetTrackId) {
+            usedTargetTracks.add(targetTrackId);
+
+            // Paste items into this track
+            for (const item of sourceItems) {
+              const relativeOffset = item.element.startTime - minStart;
+              const startTime = Math.max(0, time + relativeOffset);
+
+              // Ensure no overlap
+              const duration =
+                item.element.duration -
+                item.element.trimStart -
+                item.element.trimEnd;
+              const hasOverlap = get().checkElementOverlap(
+                targetTrackId,
+                startTime,
+                duration
+              );
+
+              if (hasOverlap) {
+                let candidateTime = startTime;
+                let safety = 0;
+                while (
+                  get().checkElementOverlap(
+                    targetTrackId,
+                    candidateTime,
+                    duration
+                  ) &&
+                  safety < 1000
+                ) {
+                  candidateTime += 0.05; // 50ms nudging
+                  safety += 1;
+                }
+                get().addElementToTrack(targetTrackId, {
+                  ...item.element,
+                  startTime: candidateTime,
+                });
+              } else {
+                get().addElementToTrack(targetTrackId, {
+                  ...item.element,
+                  startTime,
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to paste", err);
+        const { toast } = await import("sonner");
+        toast.error("Failed to paste from clipboard");
       }
     },
 

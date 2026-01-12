@@ -209,7 +209,7 @@ export function useEditorActions() {
   useActionHandler(
     "paste-selected",
     () => {
-      useTimelineStore.getState().pasteAtTime(currentTime);
+      useTimelineStore.getState().pasteFromClipboard(currentTime);
     },
     undefined
   );
