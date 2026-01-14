@@ -9,6 +9,13 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   Pause,
@@ -27,6 +34,7 @@ import {
   SplitSquareHorizontal,
   Scissors,
   LayersIcon,
+  X,
 } from "lucide-react";
 import {
   SplitButton,
@@ -61,6 +69,8 @@ export function TimelineToolbar({
     separateAudio,
     snappingEnabled,
     toggleSnapping,
+    snapConfig,
+    toggleSnapOption,
     rippleEditingEnabled,
     toggleRippleEditing,
   } = useTimelineStore();
@@ -158,11 +168,11 @@ export function TimelineToolbar({
   };
 
   const handleZoomIn = () => {
-    setZoomLevel(Math.min(4, zoomLevel + 0.25));
+    setZoomLevel(Math.min(TIMELINE_CONSTANTS.MAX_ZOOM, zoomLevel + 0.25));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(Math.max(0.25, zoomLevel - 0.25));
+    setZoomLevel(Math.max(TIMELINE_CONSTANTS.MIN_ZOOM, zoomLevel - 0.25));
   };
 
   const handleZoomSliderChange = (values: number[]) => {
@@ -218,7 +228,23 @@ export function TimelineToolbar({
               {formatTimeCode(duration, "HH:MM:SS:FF")}
             </div>
           </div>
-          {tracks.length === 0 && (
+          {selectedElements.length > 0 && (
+            <div className="flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded-sm text-xs font-medium ml-2">
+              <span>
+                {selectedElements.length}{" "}
+                {selectedElements.length === 1 ? "selected" : "selected"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-4 w-4 ml-1 hover:bg-primary/20"
+                onClick={clearSelectedElements}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+          {tracks.reduce((acc, t) => acc + t.elements.length, 0) === 0 && (
             <>
               <div className="w-px h-6 bg-border mx-1" />
               <Tooltip>
@@ -344,18 +370,53 @@ export function TimelineToolbar({
       </div>
       <div className="flex items-center gap-1">
         <TooltipProvider delayDuration={500}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="text" size="icon" onClick={toggleSnapping}>
-                {snappingEnabled ? (
-                  <Magnet className="h-4 w-4 text-primary" />
-                ) : (
-                  <Magnet className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Auto snapping</TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="text" size="icon">
+                    {snappingEnabled ? (
+                      <Magnet className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Magnet className="h-4 w-4" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Snapping options</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuCheckboxItem
+                checked={snappingEnabled}
+                onCheckedChange={toggleSnapping}
+              >
+                Snapping Enabled
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.elements}
+                onCheckedChange={() => toggleSnapOption("elements")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Clips
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.playhead}
+                onCheckedChange={() => toggleSnapOption("playhead")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Playhead
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={snapConfig.markers}
+                onCheckedChange={() => toggleSnapOption("markers")}
+                disabled={!snappingEnabled}
+              >
+                Snap to Markers
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="text" size="icon" onClick={toggleRippleEditing}>
@@ -383,10 +444,13 @@ export function TimelineToolbar({
             className="w-24"
             value={[zoomLevel]}
             onValueChange={handleZoomSliderChange}
-            min={0.25}
-            max={4}
+            min={TIMELINE_CONSTANTS.MIN_ZOOM}
+            max={TIMELINE_CONSTANTS.MAX_ZOOM}
             step={0.25}
           />
+          <span className="text-xs w-[5ch] text-center select-none text-muted-foreground">
+            {Math.round(zoomLevel * 100)}%
+          </span>
           <Button variant="text" size="icon" onClick={handleZoomIn}>
             <ZoomIn className="h-4 w-4" />
           </Button>

@@ -25,6 +25,7 @@ import {
 import { DEFAULT_FPS, useProjectStore } from "@/stores/project-store";
 import { useTimelineSnapping, SnapPoint } from "@/hooks/use-timeline-snapping";
 import { useEdgeAutoScroll } from "@/hooks/use-edge-auto-scroll";
+import { GhostTrack } from "./ghost-track";
 
 export function TimelineTrackContent({
   track,
@@ -49,6 +50,7 @@ export function TimelineTrackContent({
     addElementToTrack,
     selectedElements,
     selectElement,
+    selectRange,
     dragState,
     startDrag: startDragAction,
     updateDragTime,
@@ -56,16 +58,20 @@ export function TimelineTrackContent({
     clearSelectedElements,
     insertTrackAt,
     snappingEnabled,
+    snapConfig,
     rippleEditingEnabled,
   } = useTimelineStore();
 
   const { currentTime, duration } = usePlaybackStore();
+  const { activeProject } = useProjectStore();
 
   // Initialize snapping hook
   const { snapElementPosition, snapElementEdge } = useTimelineSnapping({
     snapThreshold: 10,
-    enableElementSnapping: snappingEnabled,
-    enablePlayheadSnapping: snappingEnabled,
+    snapConfig: snappingEnabled
+      ? snapConfig
+      : { elements: false, playhead: false, markers: false },
+    bookmarks: activeProject?.bookmarks,
   });
 
   // Helper function for drop snapping that tries both edges
@@ -136,6 +142,18 @@ export function TimelineTrackContent({
   // Set up mouse event listeners for drag
   useEffect(() => {
     if (!dragState.isDragging) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Alt") {
+        useTimelineStore.getState().setDragState({ isCopying: true });
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Alt") {
+        useTimelineStore.getState().setDragState({ isCopying: false });
+      }
+    };
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!timelineRef.current) return;
@@ -232,7 +250,11 @@ export function TimelineTrackContent({
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      if (!dragState.elementId || !dragState.trackId) return;
+      const { dragState: freshDragState } = useTimelineStore.getState();
+
+      if (!freshDragState.elementId || !freshDragState.trackId) return;
+
+      const dragState = freshDragState;
 
       // If this track initiated the drag, we should handle the mouse up regardless of where it occurs
       const isTrackThatStartedDrag = dragState.trackId === track.id;
@@ -298,41 +320,57 @@ export function TimelineTrackContent({
           });
 
           if (!hasOverlap) {
-            if (dragState.trackId === track.id) {
-              if (rippleEditingEnabled) {
-                updateElementStartTimeWithRipple(
-                  track.id,
-                  dragState.elementId,
-                  finalTime
-                );
-              } else {
-                updateElementStartTime(
-                  track.id,
-                  dragState.elementId,
-                  finalTime
-                );
+            if (dragState.isCopying) {
+              const sourceTrack = tracks.find(
+                (t) => t.id === dragState.trackId
+              );
+              const sourceElement = sourceTrack?.elements.find(
+                (e) => e.id === dragState.elementId
+              );
+              if (sourceElement) {
+                const { id, ...elementData } = sourceElement;
+                addElementToTrack(track.id, {
+                  ...elementData,
+                  startTime: finalTime,
+                });
               }
             } else {
-              moveElementToTrack(
-                dragState.trackId,
-                track.id,
-                dragState.elementId
-              );
-              requestAnimationFrame(() => {
+              if (dragState.trackId === track.id) {
                 if (rippleEditingEnabled) {
                   updateElementStartTimeWithRipple(
                     track.id,
-                    dragState.elementId!,
+                    dragState.elementId,
                     finalTime
                   );
                 } else {
                   updateElementStartTime(
                     track.id,
-                    dragState.elementId!,
+                    dragState.elementId,
                     finalTime
                   );
                 }
-              });
+              } else {
+                moveElementToTrack(
+                  dragState.trackId,
+                  track.id,
+                  dragState.elementId
+                );
+                requestAnimationFrame(() => {
+                  if (rippleEditingEnabled) {
+                    updateElementStartTimeWithRipple(
+                      track.id,
+                      dragState.elementId!,
+                      finalTime
+                    );
+                  } else {
+                    updateElementStartTime(
+                      track.id,
+                      dragState.elementId!,
+                      finalTime
+                    );
+                  }
+                });
+              }
             }
           }
         }
@@ -365,14 +403,31 @@ export function TimelineTrackContent({
           });
 
           if (!hasOverlap) {
-            if (rippleEditingEnabled) {
-              updateElementStartTimeWithRipple(
-                track.id,
-                dragState.elementId,
-                finalTime
+            if (dragState.isCopying) {
+              const sourceElement = track.elements.find(
+                (e) => e.id === dragState.elementId
               );
+              if (sourceElement) {
+                const { id, ...elementData } = sourceElement;
+                addElementToTrack(track.id, {
+                  ...elementData,
+                  startTime: finalTime,
+                });
+              }
             } else {
-              updateElementStartTime(track.id, dragState.elementId, finalTime);
+              if (rippleEditingEnabled) {
+                updateElementStartTimeWithRipple(
+                  track.id,
+                  dragState.elementId,
+                  finalTime
+                );
+              } else {
+                updateElementStartTime(
+                  track.id,
+                  dragState.elementId,
+                  finalTime
+                );
+              }
             }
           }
         }
@@ -387,10 +442,14 @@ export function TimelineTrackContent({
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
     };
   }, [
     dragState.isDragging,
@@ -398,6 +457,7 @@ export function TimelineTrackContent({
     dragState.elementId,
     dragState.trackId,
     dragState.currentTime,
+    dragState.isCopying,
     zoomLevel,
     tracks,
     track.id,
@@ -426,7 +486,8 @@ export function TimelineTrackContent({
 
     // Detect right-click (button 2) and handle selection without starting drag
     const isRightClick = e.button === 2;
-    const isMultiSelect = e.metaKey || e.ctrlKey || e.shiftKey;
+    const isToggleSelect = e.metaKey || e.ctrlKey;
+    const isRangeSelect = e.shiftKey;
 
     if (isRightClick) {
       // Handle right-click selection
@@ -436,7 +497,7 @@ export function TimelineTrackContent({
 
       // If element is not selected, select it (keep other selections if multi-select)
       if (!isSelected) {
-        selectElement(track.id, element.id, isMultiSelect);
+        selectElement(track.id, element.id, isToggleSelect || isRangeSelect);
       }
       // If element is already selected, keep it selected
 
@@ -444,8 +505,10 @@ export function TimelineTrackContent({
       return;
     }
 
-    // Handle multi-selection for left-click with modifiers
-    if (isMultiSelect) {
+    // Handle range selection
+    if (isRangeSelect) {
+      selectRange(track.id, element.id);
+    } else if (isToggleSelect) {
       selectElement(track.id, element.id, true);
     }
 
@@ -1122,6 +1185,7 @@ export function TimelineTrackContent({
         ref={timelineRef}
         className="h-full relative track-elements-container min-w-full"
       >
+        <GhostTrack track={track} zoomLevel={zoomLevel} isTarget={isDropping} />
         {track.elements.length === 0 ? (
           <div
             className={`h-full w-full rounded-sm border-2 border-dashed flex items-center justify-center text-xs text-muted-foreground transition-colors ${

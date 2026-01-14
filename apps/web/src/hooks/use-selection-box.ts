@@ -3,9 +3,12 @@ import { useState, useEffect, useCallback } from "react";
 interface UseSelectionBoxProps {
   containerRef: React.RefObject<HTMLElement>;
   playheadRef?: React.RefObject<HTMLElement>;
-  onSelectionComplete: (
-    elements: { trackId: string; elementId: string }[]
+  onSelectionChange: (
+    elements: { trackId: string; elementId: string }[],
+    isAdditive: boolean
   ) => void;
+  onSelectionStart?: () => void;
+  onSelectionEnd?: () => void;
   isEnabled?: boolean;
 }
 
@@ -13,12 +16,15 @@ interface SelectionBoxState {
   startPos: { x: number; y: number };
   currentPos: { x: number; y: number };
   isActive: boolean;
+  isAdditive: boolean;
 }
 
 export function useSelectionBox({
   containerRef,
   playheadRef,
-  onSelectionComplete,
+  onSelectionChange,
+  onSelectionStart,
+  onSelectionEnd,
   isEnabled = true,
 }: UseSelectionBoxProps) {
   const [selectionBox, setSelectionBox] = useState<SelectionBoxState | null>(
@@ -50,6 +56,7 @@ export function useSelectionBox({
         startPos: { x: e.clientX, y: e.clientY },
         currentPos: { x: e.clientX, y: e.clientY },
         isActive: false, // Will become active when mouse moves
+        isAdditive: e.shiftKey || e.ctrlKey || e.metaKey,
       });
     },
     [isEnabled, playheadRef]
@@ -57,7 +64,11 @@ export function useSelectionBox({
 
   // Function to select elements within the selection box
   const selectElementsInBox = useCallback(
-    (startPos: { x: number; y: number }, endPos: { x: number; y: number }) => {
+    (
+      startPos: { x: number; y: number },
+      endPos: { x: number; y: number },
+      isAdditive: boolean
+    ) => {
       if (!containerRef.current) return;
 
       const container = containerRef.current;
@@ -124,12 +135,9 @@ export function useSelectionBox({
       });
 
       // Always call the callback - with elements or empty array to clear selection
-      console.log(
-        JSON.stringify({ selectElementsInBox: selectedElements.length })
-      );
-      onSelectionComplete(selectedElements);
+      onSelectionChange(selectedElements, isAdditive);
     },
-    [containerRef, onSelectionComplete]
+    [containerRef, onSelectionChange]
   );
 
   // Effect to track selection box movement
@@ -143,6 +151,10 @@ export function useSelectionBox({
       // Start selection if mouse moved more than 5px
       const shouldActivate = deltaX > 5 || deltaY > 5;
 
+      if (shouldActivate && !selectionBox.isActive) {
+        onSelectionStart?.();
+      }
+
       const newSelectionBox = {
         ...selectionBox,
         currentPos: { x: e.clientX, y: e.clientY },
@@ -155,23 +167,19 @@ export function useSelectionBox({
       if (newSelectionBox.isActive) {
         selectElementsInBox(
           newSelectionBox.startPos,
-          newSelectionBox.currentPos
+          newSelectionBox.currentPos,
+          newSelectionBox.isAdditive
         );
       }
     };
 
     const handleMouseUp = () => {
-      console.log(
-        JSON.stringify({ mouseUp: { wasActive: selectionBox?.isActive } })
-      );
-
       // If we had an active selection, mark that we just finished selecting
       if (selectionBox?.isActive) {
-        console.log(JSON.stringify({ settingJustFinishedSelecting: true }));
+        onSelectionEnd?.();
         setJustFinishedSelecting(true);
         // Clear the flag after a short delay to allow click events to check it
         setTimeout(() => {
-          console.log(JSON.stringify({ clearingJustFinishedSelecting: true }));
           setJustFinishedSelecting(false);
         }, 50);
       }

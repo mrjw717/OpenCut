@@ -47,7 +47,10 @@ export type Action =
   | "undo" // Undo last action
   | "redo" // Redo last undone action
   | "copy-selected" // Copy selected elements to clipboard
-  | "paste-selected"; // Paste elements from clipboard at playhead
+  | "paste-selected" // Paste elements from clipboard at playhead
+  | "zoom-in" // Zoom in on timeline
+  | "zoom-out" // Zoom out on timeline
+  | "reset-zoom"; // Reset timeline zoom
 
 /**
  * Defines the arguments, if present for a given type that is required to be passed on
